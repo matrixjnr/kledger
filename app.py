@@ -354,4 +354,4 @@ def item_update(creditorid):
 
 
 if __name__ == '__main__':
-    app.run(port='7500', debug=True)
+    app.run()
