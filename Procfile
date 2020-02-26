@@ -1,1 +1,1 @@
-web: gunicorn kledger:app
+web: gunicorn app
