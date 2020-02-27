@@ -107,7 +107,7 @@ def get_token():
     if test:
         expires = datetime.timedelta(hours=24)
         access_token = create_access_token(identity=idnumber, expires_delta=expires)
-        return jsonify(message='Access Token Sent Successfully!', access_token=access_token)
+        return jsonify(expires='86400', access_token=access_token)
     else:
         return jsonify(message='Wrong credentials!'), 401
 
@@ -122,7 +122,7 @@ def register():
             response = {
                 'message': 'User already exists'
             }
-        return jsonify(response), 403
+            return jsonify(response), 403
 
         new_user = User(full_name=data['full_name'], idnumber=data['idnumber'], phone=data['phone'], password=data['password'])
         db.session.add(new_user)
@@ -136,7 +136,7 @@ def register():
             'status': 'error',
             'message': ['bad request body']
         }
-    return jsonify(response), 400
+        return jsonify(response), 400
 
 # Register new Creditor
 @app.route("/register/creditor", methods=['POST'])
@@ -150,9 +150,9 @@ def registeru():
             response = {
                 'message': 'Creditor already exists'
             }
-        return jsonify(response), 403
+            return jsonify(response), 403
 
-        new_creditor = Creditor(owner=owner, full_name=data['full_name'], idnumber=data['idnumber'], phone=data['phone'], debt=data['debt'])
+        new_creditor = Creditor(owner=owner, full_name=data['full_name'], idnumber=data['idnumber'], phone=data['phone'])
         db.session.add(new_creditor)
         db.session.commit()
         response = {
@@ -164,7 +164,7 @@ def registeru():
             'status': 'error',
             'message': ['bad request body']
         }
-    return jsonify(response), 400
+        return jsonify(response), 400
 
 
 # View My Profile
@@ -178,12 +178,8 @@ def get_user_details():
             'message': 'User does not exist'
         }
         return jsonify(response), 404
-    result = user_schema.dumps(user)
-    response = {
-        'data': result,
-        'status_code': 202
-    }
-    return jsonify(response)
+    result = user_schema.dump(user)
+    return jsonify(result), 202
 
 
 # View One Creditor Profile
@@ -197,12 +193,9 @@ def get_creditor_details(creditorid):
             'message': 'Creditor does not exist'
         }
         return jsonify(response), 404
-    result = creditor_schema.dumps(creditor)
-    response = {
-        'data': result,
-        'status_code': 202
-    }
-    return jsonify(response)
+    result = creditor_schema.dump(creditor)
+
+    return jsonify(result), 202
 
 
 # View Creditors Profile
@@ -216,12 +209,8 @@ def get_creditors_details():
             'message': 'No Creditors Found'
         }
         return jsonify(response), 404
-    result = creditors_schema.dumps(creditor).data
-    response = {
-        'data': result,
-        'status_code': 202
-    }
-    return jsonify(response)
+    result = creditors_schema.dump(creditor)
+    return jsonify(result), 202
 
 
 # Add new items to creditor
@@ -232,13 +221,13 @@ def add_item(creditorid):
     idnumber = get_jwt_identity()
     creditor = Creditor.query.filter_by(owner=idnumber, idnumber=creditorid).first()
     if creditor:
-        if data['borrower'] and data['item_name'] and data['price'] and data['quantity']:
+        if data['item_name'] and data['price'] and data['quantity']:
 
-            new_item = Item(borrower=data['borrower'], item_name=data['item_name'], price=data['price'], quantity=data['quantity'])
+            new_item = Item(borrower=creditorid, item_name=data['item_name'], price=data['price'], quantity=data['quantity'], owner=idnumber)
             db.session.add(new_item)
             db.session.commit()
             response = {
-                'message': 'Item added successfully.'
+                'message': 'Item added successfully to creditor.'
             }
             return jsonify(response), 202
         else:
@@ -262,27 +251,21 @@ def get_creditor_items(creditorid):
     idnumber = get_jwt_identity()
     items = Item.query.filter_by(owner=idnumber, borrower=creditorid).all()
     if items:
-        result = items_schema.dumps(items)
-    response = {
-        'data': result,
-        'status_code': 202
-    }
-    return jsonify(response)
+        result = items_schema.dump(items)
+    return jsonify(result), 202
 
 
 # View loaned user items
-@app.route("/<idnumber>/items", methods=['GET'])
+@app.route("/items", methods=['GET'])
 @jwt_required
-def get_user_items(creditorid):
+def get_user_items():
     idnumber = get_jwt_identity()
     items = Item.query.filter_by(owner=idnumber).all()
     if items:
-        result = items_schema.dumps(items)
-    response = {
-        'data': result,
-        'status_code': 202
-    }
-    return jsonify(response)
+        result = items_schema.dump(items)
+        return jsonify(result)
+    else:
+        return jsonify(message='No items found'), 404
 
 
 # endpoint to update user
@@ -290,9 +273,10 @@ def get_user_items(creditorid):
 @jwt_required
 def user_update():
     idnumber = get_jwt_identity()
-    user = User.query.get(idnumber)
-    new_name = request.json['full_name']
-    new_phone = request.json['phone']
+    data = request.get_json()
+    user = User.query.filter_by(idnumber=idnumber).first()
+    new_name = data['full_name']
+    new_phone = data['phone']
 
     user.full_name = new_name
     user.phone = new_phone
@@ -306,6 +290,7 @@ def user_update():
 @jwt_required
 def creditor_update(creditorid):
     userid = get_jwt_identity()
+    data = request.get_json()
     creditor = Creditor.query.get(idnumber=creditorid, owner=userid)
     if creditor:
         new_name = request.json['full_name']
@@ -321,11 +306,7 @@ def creditor_update(creditorid):
         db.session.commit()
         return creditor_schema.jsonify(creditor), 202
     else:
-        response = {
-            'status': '404',
-            'message': 'No such creditor!'
-        }
-        return jsonify(response), 404
+        return jsonify(message='No such creditor'), 404
 
 
 # endpoint to update item
@@ -346,12 +327,8 @@ def item_update(creditorid):
         db.session.commit()
         return item_schema.jsonify(item), 202
     else:
-        response = {
-            'status': '404',
-            'message': 'No such item!'
-        }
-        return jsonify(response), 404
+        return jsonify(message='No item found!'), 404
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(port='7500')
