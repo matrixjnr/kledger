@@ -1,5 +1,5 @@
 from config.base import app, db, jwt
-from models.models import User, Creditor, user_schema, creditors_schema, creditor_schema, Item, items_schema, item_schema
+from models.models import User, Creditor, user_schema, creditors_schema, creditor_schema, Item, items_schema, item_schema, Tx, txs_schema
 from flask import jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 import datetime
@@ -20,12 +20,12 @@ def db_drop():
 def db_seed():
 
     # Creditors
-    cr1 = Creditor(full_name='Super Man', idnumber='34522811', phone='172345678', owner='12345678')
-    cr2 = Creditor(full_name='Barry Allen', idnumber='54467811', phone='9887583876', owner='12345678')
-    cr3 = Creditor(full_name='Wally West', idnumber='54378211', phone='345533876', owner='12345678')
-    cr4 = Creditor(full_name='Oliver Arrow', idnumber='20837811', phone='83876334255', owner='23456789')
-    cr5 = Creditor(full_name='Black Carnary', idnumber='24526811', phone='24546324424', owner='23456789')
-    cr6 = Creditor(full_name='Atom Man', idnumber='13727811', phone='0969894636', owner='23456789')
+    cr1 = Creditor(full_name='Super Man', idnumber='34522811', phone='172345678', owner='12345678', debt='6050.00')
+    cr2 = Creditor(full_name='Barry Allen', idnumber='54467811', phone='9887583876', owner='12345678', debt='7300.00')
+    cr3 = Creditor(full_name='Wally West', idnumber='54378211', phone='345533876', owner='12345678', debt='360.00')
+    cr4 = Creditor(full_name='Oliver Arrow', idnumber='20837811', phone='83876334255', owner='23456789', debt='0.00')
+    cr5 = Creditor(full_name='Black Carnary', idnumber='24526811', phone='24546324424', owner='23456789', debt='50960.00')
+    cr6 = Creditor(full_name='Atom Man', idnumber='13727811', phone='0969894636', owner='23456789', debt='0.00')
 
     db.session.add(cr1)
     db.session.add(cr2)
@@ -34,7 +34,38 @@ def db_seed():
     db.session.add(cr5)
     db.session.add(cr6)
 
+    # transactions
+
+    tx1 = Tx(creditorid='34522811', owner='12345678', amount='1000.00')
+    tx2 = Tx(creditorid='34522811', owner='12345678', amount='450.00')
+    tx3 = Tx(creditorid='34522811', owner='12345678', amount='2000.00')
+    tx4 = Tx(creditorid='54467811', owner='12345678', amount='5000.00')
+    tx5 = Tx(creditorid='54467811', owner='12345678', amount='2500.00')
+    tx6 = Tx(creditorid='54467811', owner='12345678', amount='1000.00')
+    tx7 = Tx(creditorid='54378211', owner='12345678', amount='1000.00')
+    tx8 = Tx(creditorid='20837811', owner='23456789', amount='1140.00')
+    tx9 = Tx(creditorid='24526811', owner='23456789', amount='100000.00')
+    tx10 = Tx(creditorid='24526811', owner='23456789', amount='400000.00')
+    tx11 = Tx(creditorid='24526811', owner='23456789', amount='50000.00')
+    tx12 = Tx(creditorid='24526811', owner='23456789', amount='250000.00')
+    tx13 = Tx(creditorid='13727811', owner='23456789', amount='470.00')
+
+    db.session.add(tx1)
+    db.session.add(tx2)
+    db.session.add(tx3)
+    db.session.add(tx4)
+    db.session.add(tx5)
+    db.session.add(tx6)
+    db.session.add(tx7)
+    db.session.add(tx8)
+    db.session.add(tx9)
+    db.session.add(tx10)
+    db.session.add(tx11)
+    db.session.add(tx12)
+    db.session.add(tx13)
+
     # Items in both shops
+
     it1 = Item(item_name='Dancing Suit', owner='12345678', borrower='54467811', price='2100.00', quantity='3')
     it2 = Item(item_name='Flash Ring', owner='12345678', borrower='54467811', price='10000.00', quantity='1')
     it3 = Item(item_name='Super Suit', owner='12345678', borrower='34522811', price='3500.00', quantity='2')
@@ -105,9 +136,9 @@ def get_token():
         password = request.form['password']
     test = User.query.filter_by(idnumber=idnumber, password=password).first()
     if test:
-        expires = datetime.timedelta(hours=24)
+        expires = datetime.timedelta(hours=864000)
         access_token = create_access_token(identity=idnumber, expires_delta=expires)
-        return jsonify(expires='86400', access_token=access_token)
+        return jsonify(expires='8640000', access_token=access_token)
     else:
         return jsonify(message='Wrong credentials!'), 401
 
@@ -130,7 +161,7 @@ def register():
         response = {
             'message': 'New user registered'
         }
-        return jsonify(response), 202
+        return jsonify(response), 201
     else:
         response = {
             'status': 'error',
@@ -210,7 +241,7 @@ def get_creditors_details():
         }
         return jsonify(response), 404
     result = creditors_schema.dump(creditor)
-    return jsonify(result), 202
+    return jsonify(result), 200
 
 
 # Add new items to creditor
@@ -225,6 +256,10 @@ def add_item(creditorid):
 
             new_item = Item(borrower=creditorid, item_name=data['item_name'], price=data['price'], quantity=data['quantity'], owner=idnumber)
             db.session.add(new_item)
+            db.session.commit()
+            oldDebt = creditor.debt
+            newDebt = data['price'] * data['quantity']
+            creditor.debt = oldDebt + newDebt
             db.session.commit()
             response = {
                 'message': 'Item added successfully to creditor.'
@@ -284,13 +319,56 @@ def user_update():
     db.session.commit()
     return user_schema.jsonify(user)
 
+# Get transactions of Creditor
+@app.route("/<creditorid>/payments", methods=['GET'])
+@jwt_required
+def get_creditor_payments(creditorid):
+    idnumber = get_jwt_identity()
+    payments = Tx.query.filter_by(owner=idnumber, creditorid=creditorid).all()
+    if payments:
+        result = txs_schema.dump(payments)
+    return jsonify(result), 202
+
+# Create payment
+@app.route("/<creditorid>/pay", methods=['POST'])
+def create_payment(creditorid):
+    idnumber = get_jwt_identity()
+    data = request.get_json()
+    creditor = Creditor.query.get(idnumber=creditorid, owner=idnumber)
+    if creditor:
+        if data['amount']:
+
+            new_tx = Item(creditorid=creditorid, amount=data['amount'], owner=idnumber)
+            db.session.add(new_tx)
+            db.session.commit()
+            oldDebt = creditor.debt
+            pay = data['amount']
+            creditor.debt = oldDebt - pay
+            db.session.commit()
+            response = {
+                'message': 'Transaction successfull.'
+            }
+            return jsonify(response), 202
+        else:
+            response = {
+                'status': 'error',
+                'message': ['bad request body']
+            }
+            return jsonify(response), 400
+    else:
+        response = {
+            'status': 'error',
+            'message': ['No Such Creditor or Create a new Creditor!']
+        }
+        return jsonify(response), 400
+
 
 # endpoint to update creditor
 @app.route("/creditor/<creditorid>", methods=["PUT"])
 @jwt_required
 def creditor_update(creditorid):
     userid = get_jwt_identity()
-    data = request.get_json()
+    # data = request.get_json()
     creditor = Creditor.query.get(idnumber=creditorid, owner=userid)
     if creditor:
         new_name = request.json['full_name']
