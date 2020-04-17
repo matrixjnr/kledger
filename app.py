@@ -254,13 +254,16 @@ def add_item(creditorid):
     if creditor:
         if data['item_name'] and data['price'] and data['quantity']:
 
+            price = float(data['price'])
+            quantity = float(data['quantity'])
+            total = price * quantity
+            creditor.debt = creditor.debt + total
+            db.session.commit()
+
             new_item = Item(borrower=creditorid, item_name=data['item_name'], price=data['price'], quantity=data['quantity'], owner=idnumber)
             db.session.add(new_item)
             db.session.commit()
-            oldDebt = creditor.debt
-            newDebt = data['price'] * data['quantity']
-            creditor.debt = oldDebt + newDebt
-            db.session.commit()
+
             response = {
                 'message': 'Item added successfully to creditor.'
             }
@@ -268,15 +271,15 @@ def add_item(creditorid):
         else:
             response = {
                 'status': 'error',
-                'message': ['bad request body']
+                'message': 'bad request body'
             }
             return jsonify(response), 400
     else:
         response = {
             'status': 'error',
-            'message': ['No Such Creditor or Create a new Creditor!']
+            'message': 'No Such Creditor or Create a new Creditor!'
         }
-        return jsonify(response), 400
+        return jsonify(response), 404
 
 
 # View Items to a Creditor
@@ -331,14 +334,15 @@ def get_creditor_payments(creditorid):
 
 # Create payment
 @app.route("/<creditorid>/pay", methods=['POST'])
+@jwt_required
 def create_payment(creditorid):
-    idnumber = get_jwt_identity()
+    idnum = get_jwt_identity()
     data = request.get_json()
-    creditor = Creditor.query.get(idnumber=creditorid, owner=idnumber)
+    creditor = Creditor.query.filter_by(owner=idnum, idnumber=creditorid).first()
     if creditor:
         if data['amount']:
 
-            new_tx = Item(creditorid=creditorid, amount=data['amount'], owner=idnumber)
+            new_tx = Tx(creditorid=creditorid, amount=data['amount'], owner=idnum)
             db.session.add(new_tx)
             db.session.commit()
             oldDebt = creditor.debt
@@ -352,15 +356,15 @@ def create_payment(creditorid):
         else:
             response = {
                 'status': 'error',
-                'message': ['bad request body']
+                'message': 'bad request body'
             }
             return jsonify(response), 400
     else:
         response = {
             'status': 'error',
-            'message': ['No Such Creditor or Create a new Creditor!']
+            'message': 'No Such Creditor or Create a new Creditor!'
         }
-        return jsonify(response), 400
+        return jsonify(response), 404
 
 
 # endpoint to update creditor

@@ -7,12 +7,13 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 class Config():
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'super-secret-key'
-    DEBUG = True
+    DEBUG = False
     CSRF_ENABLED = True
+    PRODUCTION = True
 
 
 class Configdb():
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'kledger_test.db')
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'kledger.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 
